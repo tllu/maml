@@ -661,7 +661,10 @@ class MTPotential(LammpsPotential):
                 f"--weighting={weighting}",
             ]
             if not serial:
-                mpi_args = ["mpirun", "-np", f"{num_process}"]
+                if num_process:
+                    mpi_args = ["mpirun", "-np", f"{num_process}"]
+                else:
+                    mpi_args = ["mpirun"]
                 mpi_args.extend(running_args)
                 running_args = mpi_args
 
