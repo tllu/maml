@@ -56,7 +56,7 @@ class MTPotential(LammpsPotential):
     pair_style = "pair_style        mlip {}"
     pair_coeff = "pair_coeff        * *"
 
-    def __init__(self, name=None, param=None, version=None):
+    def __init__(self, execute_path: str, name=None, param=None, version=None):
         """
 
         Args:
@@ -64,6 +64,7 @@ class MTPotential(LammpsPotential):
             param (dict): The parameter configuration of potentials.
             version (str): The version of mlip package. Default is "mlip-2". "mlip-dev" is also supported.
         """
+        self.execute_path = execute_path
         self.name = name if name else "MTPotential"
         self.mtp_stress_order = ["xx", "yy", "zz", "yz", "xz", "xy"]
         self.vasp_stress_order = ["xx", "yy", "zz", "xy", "yz", "xz"]
@@ -563,7 +564,7 @@ class MTPotential(LammpsPotential):
         train_energies,
         train_forces,
         train_stresses,
-        unfitted_mtp="08g.mtp",
+        unfitted_mtp="08.mtp",
         max_dist=5,
         radial_basis_size=8,
         max_iter=1000,
@@ -574,6 +575,8 @@ class MTPotential(LammpsPotential):
         scale_by_force=0,
         bfgs_conv_tol=1e-3,
         weighting="vibration",
+        serial=True,
+        num_process=1,
     ):
         """
         Training data with moment tensor method.
@@ -606,12 +609,6 @@ class MTPotential(LammpsPotential):
             weighting (str): How to weight configuration with different sizes relative to each other.
                 Choose from "vibrations", "molecules" and "structures".
         """
-        if not which("mlp"):
-            raise RuntimeError(
-                "mlp has not been found.\n",
-                "Please refer to https://mlip.skoltech.ru",
-                "for further detail.",
-            )
         (
             train_structures,
             train_forces,
@@ -631,7 +628,7 @@ class MTPotential(LammpsPotential):
             MTP_file_path = os.path.join(module_dir, "params", unfitted_mtp)
             shutil.copyfile(MTP_file_path, os.path.join(os.getcwd(), unfitted_mtp))
 
-            with open("min_dist", "w") as f, subprocess.Popen(["mlp", "mindist", atoms_filename], stdout=f) as p:
+            with open("min_dist", "w") as f, subprocess.Popen([self.execute_path, "mindist", atoms_filename], stdout=f) as p:
                 p.communicate()[0]
 
             with open("min_dist") as f:
@@ -647,23 +644,29 @@ class MTPotential(LammpsPotential):
 
             save_fitted_mtp = ".".join([unfitted_mtp.split(".")[0] + "_fitted", unfitted_mtp.split(".")[1]])
 
+            running_args = [
+                self.execute_path,
+                "train",
+                unfitted_mtp,
+                atoms_filename,
+                f"--max-iter={max_iter}",
+                f"--trained-pot-name={save_fitted_mtp}",
+                f"--curr-pot-name={unfitted_mtp}",
+                f"--energy-weight={energy_weight}",
+                f"--force-weight={force_weight}",
+                f"--stress-weight={stress_weight}",
+                f"--init-params={init_params}",
+                f"--scale-by-force={scale_by_force}",
+                f"--bfgs-conv-tol={bfgs_conv_tol}",
+                f"--weighting={weighting}",
+            ]
+            if not serial:
+                mpi_args = ["mpirun", "-np", f"{num_process}"]
+                mpi_args.extend(running_args)
+                running_args = mpi_args
+
             with subprocess.Popen(
-                [
-                    "mlp",
-                    "train",
-                    unfitted_mtp,
-                    atoms_filename,
-                    f"--max-iter={max_iter}",
-                    f"--trained-pot-name={save_fitted_mtp}",
-                    f"--curr-pot-name={unfitted_mtp}",
-                    f"--energy-weight={energy_weight}",
-                    f"--force-weight={force_weight}",
-                    f"--stress-weight={stress_weight}",
-                    f"--init-params={init_params}",
-                    f"--scale-by-force={scale_by_force}",
-                    f"--bfgs-conv-tol={bfgs_conv_tol}",
-                    f"--weighting={weighting}",
-                ],
+                running_args,
                 stdout=subprocess.PIPE,
             ) as p:
                 stdout = p.communicate()[0]
@@ -731,12 +734,6 @@ class MTPotential(LammpsPotential):
                 of each structure in structures list.
             kwargs: Parameters of write_param method.
         """
-        if not which("mlp"):
-            raise RuntimeError(
-                "mlp has not been found.\n",
-                "Please refer to https://mlip.skoltech.ru ",
-                "for further detail.",
-            )
         fitted_mtp = "fitted.mtp"
         original_file = "original.cfgs"
         predict_file = "predict.cfgs"
@@ -758,9 +755,9 @@ class MTPotential(LammpsPotential):
             _, df_orig = self.read_cfgs(original_file)
 
             if not hasattr(self, "version") or self.version == "mlip-2":
-                cmd = ["mlp", "calc-efs", fitted_mtp, original_file, predict_file]
+                cmd = [self.execute_path, "calc-efs", fitted_mtp, original_file, predict_file]
             elif self.version == "mlip-dev":
-                cmd = ["mlp", "run", "mlip.ini", f"--filename={original_file}"]
+                cmd = [self.execute_path, "run", "mlip.ini", f"--filename={original_file}"]
             with subprocess.Popen(cmd, stdout=subprocess.PIPE) as p:
                 stdout = p.communicate()[0]
                 rc = p.returncode
