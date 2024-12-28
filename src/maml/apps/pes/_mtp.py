@@ -56,7 +56,7 @@ class MTPotential(LammpsPotential):
     pair_style = "pair_style        mlip {}"
     pair_coeff = "pair_coeff        * *"
 
-    def __init__(self, execute_path: str, name=None, param=None, version=None):
+    def __init__(self, name=None, param=None, version=None):
         """
 
         Args:
@@ -64,7 +64,6 @@ class MTPotential(LammpsPotential):
             param (dict): The parameter configuration of potentials.
             version (str): The version of mlip package. Default is "mlip-2". "mlip-dev" is also supported.
         """
-        self.execute_path = execute_path
         self.name = name if name else "MTPotential"
         self.mtp_stress_order = ["xx", "yy", "zz", "yz", "xz", "xy"]
         self.vasp_stress_order = ["xx", "yy", "zz", "xy", "yz", "xz"]
@@ -777,6 +776,9 @@ class MTPotential(LammpsPotential):
                 predict_file = f"{predict_file}_0"
             _, df_predict = self.read_cfgs(predict_file)
         return df_orig, df_predict
+
+    def set_exe_path(self, execute_path: str) -> None:
+        self.execute_path = execute_path
 
     @staticmethod
     def from_config(filename, elements):
