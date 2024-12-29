@@ -632,7 +632,7 @@ class MTPotential(LammpsPotential):
 
             with open("min_dist") as f:
                 lines = f.readlines()
-            min_dist = float(lines[-1].split(":")[1])
+            min_dist = float(lines[0].split(":")[1])
 
             with open(unfitted_mtp) as f:
                 template = f.read()
