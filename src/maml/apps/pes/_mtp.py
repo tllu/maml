@@ -632,7 +632,10 @@ class MTPotential(LammpsPotential):
 
             with open("min_dist") as f:
                 lines = f.readlines()
-            min_dist = float(lines[0].split(":")[1])
+
+            for line in lines:
+                if 'Global mindist' in line:
+                    min_dist = float(line.split(":")[1].strip())
 
             with open(unfitted_mtp) as f:
                 template = f.read()
